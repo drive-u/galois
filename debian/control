@@ -1,0 +1,28 @@
+Source: galois
+Priority: optional
+Maintainer: DGolick 
+Build-Depends: debhelper (>= 10)
+Standards-Version: 4.1.4
+Section: libs
+Homepage: https://github.com/drive-u/gflib
+
+Package: galois-dev
+Section: libdevel
+Architecture: any
+Depends: galois (= ${binary:Version}), ${misc:Depends}
+Description: Library for Galois-Field Arithmetic and Reed-Solomon Coding
+ Procedures and Programs for Galois-Field Arithmetic and Reed-Solomon Coding.
+ .
+ Originally downloaded from http://web.eecs.utk.edu/~jplank/plank/papers/CS-07-593/
+ .
+ 
+  This package contains the development files.
+
+Package: galois
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Library for Galois-Field Arithmetic and Reed-Solomon Coding
+ Procedures and Programs for Galois-Field Arithmetic and Reed-Solomon Coding.
+ .
+ Originally downloaded from http://web.eecs.utk.edu/~jplank/plank/papers/CS-07-593/
+ 
