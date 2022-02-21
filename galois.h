@@ -56,31 +56,69 @@ extern int *galois_get_div_table(int w);
 extern int *galois_get_log_table(int w);
 extern int *galois_get_ilog_table(int w);
 
-void galois_region_xor(           char *r1,         /* Region 1 */
-                                  char *r2,         /* Region 2 */
-                                  char *r3,         /* Sum region (r3 = r1 ^ r2) -- can be r1 or r2 */
+void galois_region_xor(           unsigned char* r1,         /* Region 1 */
+                                  unsigned char* r2,         /* Region 2 */
+                                  unsigned char* r3,         /* Sum region (r3 = r1 ^ r2) -- can be r1 or r2 */
                                   int nbytes);      /* Number of bytes in region */
 
 /* These multiply regions in w=8, w=16 and w=32.  They are much faster
    than calling galois_single_multiply.  The regions must be long word aligned. */
+int galois_08_multtable_divide(int x, int y);
+int galois_08_multtable_multiply(int x, int y);
 
-void galois_w08_region_multiply(char *region,       /* Region to multiply */
+void galois_w08_region_multiply(unsigned char* region,       /* Region to multiply */
+    int multby,       /* Number to multiply by */
+    int nbytes);         /*overwrites region*/
+void galois_w08_region_out_multiply(
+    const unsigned char* region,       /* Region to multiply */
+    int multby,       /* Number to multiply by */
+    int nbytes,
+    unsigned char* regionOut);         /*overwrites region*/
+void galois_w08_region_multiply_accumulate(const unsigned char* region,       /* Region to multiply */
+    int multby,       /* Number to multiply by */
+    int nbytes,       /* Number of bytes in region */
+    unsigned char* r2);         /* putput region summed */
+void galois_w08_int_region_multiply(int* region,      /* Region to multiply */
+                                    int multby,       /* Number to multiply by */
+                                    int nSymbols);    /* Number of symbols in region */
+
+void galois_w08_int_region_multiply_accumulate(
+                                    const int* region,      /* Region to multiply */
+                                    int multby,       /* Number to multiply by */
+                                    int nbytes,       /* Number of bytes in region */
+                                    int* r2);         /* resukt r2[i] ^= region[i] */
+
+void galois_w16_region_multiply(unsigned char* region,       /* Region to multiply */
+    int multby,       /* Number to multiply by */
+    int nbytes);         /*overwrites region*/
+
+void galois_w16_region_multiply_accumulate(const unsigned char* region,       /* Region to multiply */
+    int multby,       /* Number to multiply by */
+    int nbytes,       /* Number of bytes in region */
+    unsigned char* r2);         /* putput region summed */
+
+void galois_w16_region_out_multiply(const unsigned char* region,       /* Region to multiply */
+    int multby,       /* Number to multiply by */
+    int nbytes,       /* Number of bytes in region */
+    unsigned char* r2);         /* If (r2 != NULL && add) the produce is XOR'd with r2 */
+
+
+void galois_w16_int_region_multiply(int* region,     /* Region to multiply */
+                                    int multby,       /* Number to multiply by */
+                                    int nSymbols);    /* Number of symbols in region */
+
+void galois_w16_int_region_multiply_accumulate(
+    const int* region,      /* Region to multiply */
+    int multby,       /* Number to multiply by */
+    int nSymbols,    /* Number of symbols in region */
+    int* r2);         /* resukt r2[i] ^= region[i] */
+
+void galois_w32_region_multiply(unsigned char* region,       /* Region to multiply */
                                   int multby,       /* Number to multiply by */
                                   int nbytes,       /* Number of bytes in region */
-                                  char *r2,         /* If r2 != NULL, products go here.  
+                                  unsigned char* r2,         /* If r2 != NULL, products go here.  
                                                        Otherwise region is overwritten */
                                   int add);         /* If (r2 != NULL && add) the produce is XOR'd with r2 */
 
-void galois_w16_region_multiply(char *region,       /* Region to multiply */
-                                  int multby,       /* Number to multiply by */
-                                  int nbytes,       /* Number of bytes in region */
-                                  char *r2,         /* If r2 != NULL, products go here.  
-                                                       Otherwise region is overwritten */
-                                  int add);         /* If (r2 != NULL && add) the produce is XOR'd with r2 */
 
-void galois_w32_region_multiply(char *region,       /* Region to multiply */
-                                  int multby,       /* Number to multiply by */
-                                  int nbytes,       /* Number of bytes in region */
-                                  char *r2,         /* If r2 != NULL, products go here.  
-                                                       Otherwise region is overwritten */
-                                  int add);         /* If (r2 != NULL && add) the produce is XOR'd with r2 */
+

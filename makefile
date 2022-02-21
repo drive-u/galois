@@ -25,16 +25,14 @@ CC = gcc
 CFLAGS = -O3
 DESTDIR=
 
-UTILS =	gf_mult gf_div gf_xor gf_log gf_ilog gf_basic_tester gf_inverse gf_xor_tester
 LIBS =  libgalois.so.1.0.0 libgalois.so.1 libgalois.so
 INCLUDES = galois.h
 
-ALL =   $(UTILS) $(LIBS)
+ALL =   $(LIBS)
 all: $(ALL)
 
 install: $(ALL)
 	mkdir -p $(DESTDIR)/usr/bin $(DESTDIR)/usr/include $(DESTDIR)/usr/lib
-	cp $(UTILS) $(DESTDIR)/usr/bin/
 	cp -a $(LIBS) $(DESTDIR)/usr/lib/
 	cp $(INCLUDES) $(DESTDIR)/usr/include/
 
@@ -61,33 +59,3 @@ clean:
 
 galois.o: galois.h
 
-gf_xor_tester.o: galois.h galois.o
-gf_xor_tester: gf_xor_tester.o galois.o
-	$(CC) $(CFLAGS) -o gf_xor_tester gf_xor_tester.o galois.o
-
-gf_basic_tester.o: galois.h galois.o
-gf_basic_tester: gf_basic_tester.o galois.o
-	$(CC) $(CFLAGS) -o gf_basic_tester gf_basic_tester.o galois.o
-
-gf_inverse.o: galois.h galois.o
-gf_inverse: gf_inverse.o galois.o
-	$(CC) $(CFLAGS) -o gf_inverse gf_inverse.o galois.o
-
-gf_ilog.o: galois.h galois.o
-gf_ilog: gf_ilog.o galois.o
-	$(CC) $(CFLAGS) -o gf_ilog gf_ilog.o galois.o
-
-gf_log.o: galois.h galois.o
-gf_log: gf_log.o galois.o
-	$(CC) $(CFLAGS) -o gf_log gf_log.o galois.o
-
-gf_mult.o: galois.h galois.o
-gf_mult: gf_mult.o galois.o
-	$(CC) $(CFLAGS) -o gf_mult gf_mult.o galois.o
-
-gf_div.o: galois.h galois.o
-gf_div: gf_div.o galois.o
-	$(CC) $(CFLAGS) -o gf_div gf_div.o galois.o
-
-gf_xor: gf_xor.o galois.o
-	$(CC) $(CFLAGS) -o gf_xor gf_xor.o

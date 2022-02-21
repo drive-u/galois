@@ -139,6 +139,8 @@ static int *galois_div_tables[33] = { NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL };
 
+static unsigned char* galois_mult_table8 = NULL;
+//static char* galois_div_table8 = NULL;
 /* Special case for w = 32 */
 
 static int *galois_split_w8[7] = { NULL, NULL, NULL, NULL, NULL, NULL, NULL };
@@ -257,6 +259,20 @@ int galois_create_mult_tables(int w)
       j++;
     }
   }
+  if (w == 8 && galois_mult_table8 == NULL)
+  {
+      // using a char table is more cache friendly
+      unsigned char* data = malloc(nw[w] * nw[w] + 63);
+      // adjust so its at a 64 byte offset so that it falls on a cache line
+      unsigned offset = 0x40-((unsigned long)data & 0x3f);
+      if (offset == 0x40)
+          offset = 0;
+      galois_mult_table8 = data + offset;
+      for (j = 0; j < nw[w] * nw[w]; ++j)
+      {
+          galois_mult_table8[j] = (unsigned char)galois_mult_tables[w][j];
+      }
+  }
   return 0;
 }
 
@@ -355,7 +371,11 @@ int galois_single_multiply(int x, int y, int w)
 
 int galois_multtable_multiply(int x, int y, int w)
 {
-  return galois_mult_tables[w][(x<<w)|y];
+    return galois_mult_tables[w][(x << w) | y];
+}
+int galois_08_multtable_multiply(int x, int y)
+{
+    return galois_mult_table8[(x << 8) | y];
 }
 
 int galois_single_divide(int a, int b, int w)
@@ -406,77 +426,122 @@ int galois_multtable_divide(int x, int y, int w)
   return galois_div_tables[w][(x<<w)|y];
 }
 
-void galois_w08_region_multiply(char *region,      /* Region to multiply */
+int galois_08_multtable_divide(int x, int y)
+{
+    return galois_div_tables[8][(x << 8) | y];
+}
+
+void galois_w08_region_multiply(unsigned char* region,      /* Region to multiply */
+    int multby,       /* Number to multiply by */
+    int nbytes)
+{
+    unsigned char prod;
+    int srow;
+
+    srow = multby * nw[8];
+    unsigned char* mult_table = galois_mult_table8 + srow;
+    unsigned char* curSymbol = region + nbytes;
+
+    while (curSymbol != region) {
+        --curSymbol;
+        prod = mult_table[*curSymbol];
+        *curSymbol = prod;
+    }
+
+    return;
+}
+void galois_w08_region_out_multiply(const unsigned char* region,      /* Region to multiply */
+    int multby,       /* Number to multiply by */
+    int nbytes,
+    unsigned char* regionOut)
+{
+    unsigned char prod;
+    int i, srow;
+
+    srow = multby * nw[8];
+    unsigned char* mult_table = galois_mult_table8 + srow;
+    for (i = 0; i < nbytes; i++) {
+        prod = mult_table[region[i]];
+        regionOut[i] = prod;
+    }
+
+    return;
+}
+void galois_w08_region_multiply_accumulate(const unsigned char* region,      /* Region to multiply */
                                   int multby,       /* Number to multiply by */
                                   int nbytes,        /* Number of bytes in region */
-                                  char *r2,          /* If r2 != NULL, products go here */
-                                  int add)
+                                  unsigned char* r2)
 {
-  unsigned char *ur1, *ur2, *cp;
+  unsigned char *cp;
   unsigned char prod;
   int i, srow, j;
   unsigned long l, *lp2;
   unsigned char *lp;
   int sol;
 
-  ur1 = (unsigned char *) region;
-  ur2 = (r2 == NULL) ? ur1 : (unsigned char *) r2;
 
-/* This is used to test its performance with respect to just calling galois_single_multiply 
-  if (r2 == NULL || !add) {
-    for (i = 0; i < nbytes; i++) ur2[i] = galois_single_multiply(ur1[i], multby, 8);
-  } else {
-    for (i = 0; i < nbytes; i++) {
-      ur2[i] = (ur2[i]^galois_single_multiply(ur1[i], multby, 8));
-    }
-  }
- */
-
-  if (galois_mult_tables[8] == NULL) {
-    if (galois_create_mult_tables(8) < 0) {
-      fprintf(stderr, "galois_08_region_multiply -- couldn't make multiplication tables\n");
-      exit(1);
-    }
-  }
   srow = multby * nw[8];
-  if (r2 == NULL || !add) {
-    for (i = 0; i < nbytes; i++) {
-      prod = galois_mult_tables[8][srow+ur1[i]];
-      ur2[i] = prod;
-    }
-  } else {
-    sol = sizeof(long);
-    lp2 = &l;
-    lp = (unsigned char *) lp2;
-    for (i = 0; i < nbytes; i += sol) {
-      cp = ur2+i;
-      lp2 = (unsigned long *) cp;
+  unsigned char* mult_table = galois_mult_table8 + srow;
+  sol = sizeof(long);
+  lp2 = &l;
+  lp = (unsigned char *) lp2;
+  for (i = 0; i < nbytes; i += sol) {
+      cp = r2 + i;
+      lp2 = (unsigned long*)cp;
       for (j = 0; j < sol; j++) {
-        prod = galois_mult_tables[8][srow+ur1[i+j]];
-        lp[j] = prod;
+          prod = mult_table[region[i + j]];
+          lp[j] = prod;
       }
       *lp2 = (*lp2) ^ l;
-    }
   }
   return;
 }
 
-void galois_w16_region_multiply(char *region,      /* Region to multiply */
+void galois_w08_int_region_multiply(int *region,      /* Region to multiply */
+                                  int multby,       /* Number to multiply by */
+                                  int nbytes)
+{
+  unsigned char prod;
+  int i, srow;
+
+  srow = multby * nw[8];
+  unsigned char* mult_table = galois_mult_table8 + srow;
+    for (i = 0; i < nbytes; i++) {
+        prod = mult_table[region[i]];//galois_mult_table8[srow+ur1[i]];
+        region[i] = prod;
+    }
+  
+  return;
+}
+void galois_w08_int_region_multiply_accumulate(const int *region,      /* Region to multiply */
+                                  int multby,       /* Number to multiply by */
+                                  int ncols,
+                                  int* r2)
+{
+  unsigned char prod;
+  int i, srow;
+
+  srow = multby * nw[8];
+  unsigned char* mult_table = galois_mult_table8 + srow;
+  for (i = 0; i < ncols; i++) {
+      prod = mult_table[region[i]];//galois_mult_table8[srow+ur1[i]];
+      r2[i] ^= prod;
+  }
+
+  return;
+}
+
+void galois_w16_region_multiply_accumulate(const unsigned char* region,      /* Region to multiply */
                                   int multby,       /* Number to multiply by */
                                   int nbytes,        /* Number of bytes in region */
-                                  char *r2,          /* If r2 != NULL, products go here */
-                                  int add)
+                                  unsigned char* r2)
 {
   unsigned short *ur1, *ur2, *cp;
   int prod;
   int i, log1, j, log2;
-  unsigned long l, *lp2, *lptop;
+  unsigned long l, *lp2;
   unsigned short *lp;
   int sol;
-
-  ur1 = (unsigned short *) region;
-  ur2 = (r2 == NULL) ? ur1 : (unsigned short *) r2;
-  nbytes /= 2;
 
 
 /* This is used to test its performance with respect to just calling galois_single_multiply */
@@ -492,59 +557,162 @@ void galois_w16_region_multiply(char *region,      /* Region to multiply */
   */
 
   if (multby == 0) {
-    if (!add) {
-      lp2 = (unsigned long *) ur2;
-      ur2 += nbytes;
-      lptop = (unsigned long *) ur2;
-      while (lp2 < lptop) { *lp2 = 0; lp2++; }
-    }
+    memset(r2, 0, nbytes);
     return;
   }
     
-  if (galois_log_tables[16] == NULL) {
-    if (galois_create_log_tables(16) < 0) {
-      fprintf(stderr, "galois_16_region_multiply -- couldn't make log tables\n");
-      exit(1);
-    }
-  }
+
+  ur1 = (unsigned short *) region;
+  ur2 = (r2 == NULL) ? ur1 : (unsigned short *) r2;
+  nbytes /= 2;
+ 
   log1 = galois_log_tables[16][multby];
 
-  if (r2 == NULL || !add) {
-    for (i = 0; i < nbytes; i++) {
-      if (ur1[i] == 0) {
-        ur2[i] = 0;
-      } else {
-        prod = galois_log_tables[16][ur1[i]] + log1;
-        ur2[i] = galois_ilog_tables[16][prod];
-      }
-    }
-  } else {
-    sol = sizeof(long)/2;
-    lp2 = &l;
-    lp = (unsigned short *) lp2;
-    for (i = 0; i < nbytes; i += sol) {
-      cp = ur2+i;
-      lp2 = (unsigned long *) cp;
-      for (j = 0; j < sol; j++) {
-        if (ur1[i+j] == 0) {
-          lp[j] = 0;
-        } else {
-          log2 = galois_log_tables[16][ur1[i+j]];
+ 
+  sol = sizeof(long)/2;
+  lp2 = &l;
+  lp = (unsigned short *) lp2;
+  for (i = 0; i < nbytes; i += sol) {
+    cp = ur2+i;
+    lp2 = (unsigned long *) cp;
+    for (j = 0; j < sol; j++) {
+      if (ur1[i+j] != 0) {
+          log2 = galois_log_tables[16][ur1[i + j]];
           prod = log2 + log1;
           lp[j] = galois_ilog_tables[16][prod];
-        }
+      } else {
+           lp[j] = 0;
       }
-      *lp2 = (*lp2) ^ l;
     }
+    *lp2 = (*lp2) ^ l;
   }
+
   return; 
 }
+void galois_w16_region_out_multiply(const unsigned char* region,       /* Region to multiply */
+    int multby,       /* Number to multiply by */
+    int nbytes,       /* Number of bytes in region */
+    unsigned char* r2)        /* If (r2 != NULL && add) the produce is XOR'd with r2 */
+{
+    int prod;
+  int i, log1;
+
+
+  if (multby == 0) {
+    memset(r2, 0, nbytes);
+    return;
+  }
+   
+  int* logTable = galois_log_tables[16];
+  int* ilogTable = galois_ilog_tables[16];
+  log1 = logTable[multby];
+
+    for (i = 0; i < nbytes; i++) {
+      if (region[i] != 0) {
+          prod = logTable[region[i]] + log1;
+          r2[i] = ilogTable[prod];
+      } else {
+          r2[i] = 0;
+      }
+    }
+ 
+  return; 
+}
+void galois_w16_region_multiply(unsigned char* region,       /* Region to multiply */
+    int multby,       /* Number to multiply by */
+    int nbytes)       /* Number of bytes in region */
+{
+    unsigned short* ur1, * urCur;;
+    int prod;
+    int log1;
+
+    if (multby == 0) {
+        memset(region, 0, nbytes);
+        return;
+    }
+    int nSymbols = nbytes / 2;
+    ur1 = (unsigned short *) region;
+    urCur = ur1 + nSymbols;
+    int* logTable = galois_log_tables[16];
+    int* ilogTable = galois_ilog_tables[16];
+    log1 = logTable[multby];
+
+    while(urCur != ur1) {
+        --urCur;
+        if (*urCur != 0) {
+            prod = logTable[*urCur] + log1;
+            *urCur = ilogTable[prod];
+        }
+    }
+
+    return;
+}
+void galois_w16_int_region_multiply(int* region,     /* Region to multiply */
+    int multby,       /* Number to multiply by */
+    int nSymbols)     /* Number of symbols in region */
+{
+    int* pTop;
+    int prod;
+    int i, log1;
+    int* logTable;
+    int* invLogTable;
+
+    if (multby == 0) 
+    {
+        pTop = region + nSymbols;
+        while (region < pTop) 
+        { 
+            *region = 0; 
+            region++; 
+        }
+        return;
+    }
+    logTable = galois_log_tables[16];
+    invLogTable = galois_ilog_tables[16];
+    log1 = galois_log_tables[16][multby];
+
+    for (i = 0; i < nSymbols; i++) {
+        if (region[i] != 0) {
+            prod = logTable[region[i]] + log1;
+            region[i] = invLogTable[prod];
+        }
+    }
+    return;
+}
+
+void galois_w16_int_region_multiply_accumulate(
+    const int* region,      /* Region to multiply */
+    int multby,       /* Number to multiply by */
+    int nSymbols,    /* Number of symbols in region */
+    int* r2)         /* result r2[i] ^= region[i] */
+{
+    int prod;
+    int i, log1, log2;
+    int* logTable, *iLogTable;
+
+    if (multby == 0) {
+        return;
+    }
+    logTable = galois_log_tables[16];
+    iLogTable = galois_ilog_tables[16];
+    log1 = logTable[multby];
+
+    for (i = 0; i < nSymbols; ++i) {
+        if (region[i] != 0) {
+            log2 = logTable[region[i]];
+            prod = log2 + log1;
+            r2[i] ^= iLogTable[prod];
+        }
+    }
+    return;
+}
+
 
 /* This will destroy mat, by the way */
 
 void galois_invert_binary_matrix(int *mat, int *inv, int rows)
 {
-  int cols, i, j, k;
+    int cols, i, j;
   int tmp;
  
   cols = rows;
@@ -599,9 +767,9 @@ int galois_inverse(int y, int w)
 
 int galois_shift_inverse(int y, int w)
 {
-  int mat[1024], mat2[32];
-  int inv[1024], inv2[32];
-  int ind, i, j, k, prod;
+  int mat2[32];
+  int inv2[32];
+  int i;
  
   for (i = 0; i < w; i++) {
     mat2[i] = y;
@@ -659,14 +827,13 @@ int *galois_get_ilog_table(int w)
   return galois_ilog_tables[w];
 }
 
-void galois_w32_region_multiply(char *region,      /* Region to multiply */
+void galois_w32_region_multiply(unsigned char* region,      /* Region to multiply */
                                   int multby,       /* Number to multiply by */
                                   int nbytes,        /* Number of bytes in region */
-                                  char *r2,          /* If r2 != NULL, products go here */
+                                  unsigned char* r2,          /* If r2 != NULL, products go here */
                                   int add)
 {
-  unsigned int *ur1, *ur2, *cp, *ur2top;
-  unsigned long *lp2, *lptop;
+  unsigned int *ur1, *ur2, *ur2top;
   int i, j, a, b, accumulator, i8, j8, k;
   int acache[4];
 
@@ -722,17 +889,73 @@ void galois_w32_region_multiply(char *region,      /* Region to multiply */
   return;
 
 }
+void galois_w32_int_region_multiply(int* region,      /* Region to multiply */
+                                    int multby,       /* Number to multiply by */
+                                    int nSymbols)    /* Number of symbols in region */
+{
+    int i, j, a, b, accumulator,k;
+    unsigned char* acache;
+    unsigned char* bcache;
 
-void galois_region_xor(           char *r1,         /* Region 1 */
-                                  char *r2,         /* Region 2 */
-                                  char *r3,         /* Sum region (r3 = r1 ^ r2) -- can be r1 or r2 */
+    acache = (unsigned char*)&multby;
+ 
+    for (k = 0; k < nSymbols; k++) {
+        accumulator = 0;
+        for (i = 0; i < 4; i++) {
+            a = (int)acache[i];
+            bcache = (unsigned char*) (region + k);
+            for (j = 0; j < 4; j++) {
+                b = bcache[j];
+                accumulator ^= galois_split_w8[i + j][a | b];
+            }
+        }
+        region[k] = accumulator;
+    }
+
+    return;
+
+}
+void galois_w32_int_region_multiply_accumulate(
+    int* region,      /* Region to multiply */
+    int multby,       /* Number to multiply by */
+    int nSymbols,    /* Number of symbols in region */
+    int* r2)         /* resukt r2[i] ^= region[i] */
+{
+    int i, j, a, b, accumulator, k;
+    unsigned char* acache;
+    unsigned char* bcache;
+
+    acache = (unsigned char*)&multby;
+
+
+    /* If we're overwriting r2, then we can't do better than just calling split_multiply.
+       We'll inline it here to save on the procedure call overhead */
+    
+    for (k = 0; k < nSymbols; k++) {
+        accumulator = 0;
+        for (i = 0; i < 4; i++) {
+            a = acache[i];
+            bcache = (unsigned char*)(region + k);
+            for (j = 0; j < 4; j++) {
+                b = bcache[j];
+                accumulator ^= galois_split_w8[i + j][a | b];
+            }
+        }
+        r2[k] = (r2[k] ^ accumulator);
+    }
+    return;
+
+}
+void galois_region_xor(           unsigned char* r1,         /* Region 1 */
+                                  unsigned char* r2,         /* Region 2 */
+                                  unsigned char* r3,         /* Sum region (r3 = r1 ^ r2) -- can be r1 or r2 */
                                   int nbytes)       /* Number of bytes in region */
 {
   long *l1;
   long *l2;
   long *l3;
   long *ltop;
-  char *ctop;
+  unsigned char* ctop;
   
   ctop = r1 + nbytes;
   ltop = (long *) ctop;

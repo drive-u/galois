@@ -14,9 +14,7 @@ Description: Library for Galois-Field Arithmetic and Reed-Solomon Coding
  Procedures and Programs for Galois-Field Arithmetic and Reed-Solomon Coding.
  .
  Originally downloaded from http://web.eecs.utk.edu/~jplank/plank/papers/CS-07-593/
- .
- 
-  This package contains the development files.
+
 
 Package: galois
 Architecture: any
